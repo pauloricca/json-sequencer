@@ -1,13 +1,13 @@
 const LOCAL_STORAGE_ID = "saved-source";
-const DEFAULT_NOTE_LENGTH = 100;
-const DEFAULT_STEP_DURATION = 200;
+const DEFAULT_NOTE_LENGTH = 200;
+const DEFAULT_STEP_DURATION = 500;
 
 const context = new AudioContext();
 
 const defaultSource = {
 	"instruments": {
 		"lead": {
-			"volume": 0.3,
+			"volume": 0.1,
 			"sequences": [
 				{
 					"pattern": [800, 1200, 1500, 1600],
@@ -19,17 +19,21 @@ const defaultSource = {
 				}
 			]
 		},
-		"lead": {
+		"bass": {
 			"length": 4,
 			"volume": 1,
+			"attack": 100,
+			"decay": 0,
+			"sustain": 0.5,
+			"release": 500,
 			"sequences": [
 				{
-					"pattern": [400, 400, 400, 400],
-					"repeat": 4
+					"pattern": [400, 400, 400, 600],
+					"repeat": 1
 				},
 				{
 					"pattern": [300, 300, 300, 300],
-					"repeat": 4
+					"repeat": 1
 				}
 			]
 		}
@@ -101,6 +105,10 @@ const playLoop = () => {
 		const instrument = parsedSource.instruments[instrumentName];
 		const length = instrument.length ?? 1;
 		const volume = instrument.volume ?? 1;
+		const attack = instrument.attack ?? 0;
+		const decay = instrument.decay ?? 0;
+		const sustain = instrument.sustain ?? 1;
+		const release = instrument.release ?? 0;
 		const instrumentState = state.instruments[instrumentName];
 
 		if (instrument.sequences?.length > 0 && instrumentState.clock % length == 0) {
@@ -119,7 +127,15 @@ const playLoop = () => {
 
 				const noteFreq = sequence.pattern[instrumentState.currentNoteIndex];
 
-        playNote(noteFreq, DEFAULT_NOTE_LENGTH * length, 20 * length, 10 * length, 0.5, 10 * length, volume);
+        playNote({
+					freq: noteFreq,
+					noteLength: DEFAULT_NOTE_LENGTH * length,
+					attackTime: attack,
+					decayTime: decay,
+					sustainLevel: sustain,
+					releaseTime: release,
+					loudness: volume
+				});
 
 				instrumentState.currentNoteIndex ++;
 			}
@@ -135,30 +151,39 @@ const playLoop = () => {
 	});
 }
 
-const playNote = (freq, noteLength, attackTime, decayTime, sustainLevel, releaseTime, loudness) => {
-	const oscillator = context.createOscillator();
-	const gainNode = context.createGain();
+const playNote = ({
+  freq,
+  noteLength,
+  attackTime = 0,
+  decayTime = 0,
+  sustainLevel = 1,
+  releaseTime = 0,
+  loudness = 1,
+}) => {
+  const oscillator = context.createOscillator();
+  const gainNode = context.createGain();
 
-	oscillator.type = "sine";
-	oscillator.connect(gainNode);
-	gainNode.connect(context.destination);
-	oscillator.frequency.value = freq;
+  oscillator.type = "sine";
+  oscillator.connect(gainNode);
+  gainNode.connect(context.destination);
+  oscillator.frequency.value = freq;
 
-	const now = context.currentTime;
-	const attackEnd = now + attackTime / 1000; // convert attackTime to seconds
-	const decayEnd = attackEnd + decayTime / 1000; // convert decayTime to seconds
-	const releaseEnd = decayEnd + releaseTime / 1000; // convert releaseTime to seconds
+  const now = context.currentTime;
+  const attackEnd = now + attackTime / 1000; // convert attackTime to seconds
+  const decayEnd = attackEnd + decayTime / 1000; // convert decayTime to seconds
+	const sustainEnd = decayEnd + noteLength - attackTime - decayTime / 1000; // convert sustainTime to seconds
+  const releaseEnd = sustainEnd + releaseTime / 1000; // convert releaseTime to seconds
 
-	gainNode.gain.setValueAtTime(0, now);
-	gainNode.gain.linearRampToValueAtTime(loudness, attackEnd);
-	gainNode.gain.linearRampToValueAtTime(sustainLevel * loudness, decayEnd); // Adjust the sustain level based on loudness
+  gainNode.gain.setValueAtTime(0, now);
+  gainNode.gain.linearRampToValueAtTime(loudness, attackEnd);
+  gainNode.gain.linearRampToValueAtTime(sustainLevel * loudness, decayEnd); // Adjust the sustain level based on loudness
+  gainNode.gain.setValueAtTime(sustainLevel * loudness, sustainEnd); // Adjust the sustain level based on loudness
+  gainNode.gain.linearRampToValueAtTime(0, releaseEnd + 0.01);
 
-	oscillator.start();
-	gainNode.gain.setValueAtTime(sustainLevel * loudness, releaseEnd); // Adjust the sustain level based on loudness
-	gainNode.gain.linearRampToValueAtTime(0, releaseEnd + 0.01);
+  oscillator.start();
 
-	// Stop the oscillator after the release time
-	setTimeout(function () {
-		oscillator.stop();
-	}, releaseEnd + noteLength);
-}
+  // Stop the oscillator after the release time
+  setTimeout(function () {
+    oscillator.stop();
+  }, noteLength + releaseTime + 1000);
+};
