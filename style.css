@@ -1,0 +1,60 @@
+html {
+	padding: 8px;
+	font-family: sans-serif;
+	font-size: 12px;
+	overflow: hidden;
+}
+
+body {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	max-height: 100%;
+	margin: 0;
+}
+
+#source-container {
+	display: flex;
+	height: 100%;
+	overflow: auto;
+}
+
+#source-line-numbers {
+	padding: 10px;
+	color: #888;
+	background: #f0f0f0;
+	text-align: right;
+	user-select: none;
+	border-radius: 6px 0 0 6px;
+}
+
+#source-textarea {
+	width: 100%;
+	font-family: monospace;
+	white-space: pre;
+	tab-size: 3;
+	padding: 10px;
+	font-size: 12px;
+	border: none;
+	outline: none;
+	resize: none;
+	display: block;
+  overflow: hidden;
+}
+
+#play-stop-button {
+	padding: 16px;
+}
+
+#code-has-error {
+	background-color: red;
+	color: white;
+	padding: 6px 12px;
+	border-radius: 6px;
+	font-weight: bold;
+}
+
+button {
+	border-radius: 6px;
+	border-width: 1px;
+}
