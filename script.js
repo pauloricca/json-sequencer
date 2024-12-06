@@ -1,13 +1,33 @@
 const LOCAL_STORAGE_ID = "saved-source";
+const MAX_VOLUME = -5;
+
 const DEFAULT_NOTE_LENGTH = 200;
 const DEFAULT_STEP_DURATION = 500;
-
-const context = new AudioContext();
 
 const defaultSource = {
 	"instruments": {
 		"lead": {
 			"volume": 0.1,
+			"oscillators": [
+				{
+					"type": "square",
+					"length": 0.5,
+					"volume": 0.1,
+					"attack": 10,
+					"decay": 20,
+					"sustain": 0.1,
+					"release": 50
+				},
+				{
+					"type": "sine",
+					"volume": 0.1,
+					"attack": 100,
+					"decay": 0,
+					"sustain": 1,
+					"release": 500,
+					"detune": 0.5
+				}
+			],
 			"sequences": [
 				{
 					"pattern": [800, 1200, 1500, 1600],
@@ -20,20 +40,22 @@ const defaultSource = {
 			]
 		},
 		"bass": {
-			"length": 4,
+			"subdivision": 4,
 			"volume": 1,
-			"attack": 100,
-			"decay": 0,
-			"sustain": 0.5,
-			"release": 500,
+			"oscillators": [
+				{
+					"attack": 100,
+					"decay": 0,
+					"sustain": 0.5,
+					"release": 500
+				}
+			],
 			"sequences": [
 				{
-					"pattern": [400, 400, 400, 600],
-					"repeat": 1
+					"pattern": [400, 400, 400, 600]
 				},
 				{
-					"pattern": [300, 300, 300, 300],
-					"repeat": 1
+					"pattern": [300, 300, 300, 300]
 				}
 			]
 		}
@@ -44,6 +66,17 @@ let isPlaying = false;
 let metronomeInterval = null;
 let parsedSource = null;
 const state = { instruments: {} };
+
+const context = new AudioContext();
+
+// Global limiter to keep the levels under control
+const limiter = context.createDynamicsCompressor();
+limiter.threshold.value = MAX_VOLUME;
+limiter.knee.value = 0;
+limiter.ratio.value = 20;
+limiter.attack.value = 0;
+limiter.release.value = 0.2;
+limiter.connect(context.destination);
 
 $(() => {
   $("#source-textarea").on("change keyup", sourceChangeHandler);
@@ -103,20 +136,17 @@ const playLoop = () => {
 		}
 
 		const instrument = parsedSource.instruments[instrumentName];
-		const length = instrument.length ?? 1;
+		const subdivision = instrument.subdivision ?? 1;
 		const volume = instrument.volume ?? 1;
-		const attack = instrument.attack ?? 0;
-		const decay = instrument.decay ?? 0;
-		const sustain = instrument.sustain ?? 1;
-		const release = instrument.release ?? 0;
 		const instrumentState = state.instruments[instrumentName];
 
-		if (instrument.sequences?.length > 0 && instrumentState.clock % length == 0) {
+		if (instrument.sequences?.length > 0 && instrumentState.clock % subdivision == 0) {
 			if (instrumentState.currentSequence >= instrument.sequences.length) {
 				instrumentState.currentSequence = 0;
 				instrumentState.currentNoteIndex = 0;
 			}
 			const sequence = instrument.sequences[instrumentState.currentSequence];
+			const repeat = sequence.repeat ?? 1;
 
 			if (sequence.pattern) {
 				if (instrumentState.currentNoteIndex >= sequence.pattern.length) {
@@ -127,20 +157,31 @@ const playLoop = () => {
 
 				const noteFreq = sequence.pattern[instrumentState.currentNoteIndex];
 
-        playNote({
-					freq: noteFreq,
-					noteLength: DEFAULT_NOTE_LENGTH * length,
-					attackTime: attack,
-					decayTime: decay,
-					sustainLevel: sustain,
-					releaseTime: release,
-					loudness: volume
+				instrument.oscillators.forEach((oscillator) => {
+					const oscillatorVolume = volume * (oscillator.volume ?? 1);
+					const type = oscillator.type;
+					const attack = oscillator.attack ?? 0;
+					const decay = oscillator.decay ?? 0;
+					const sustain = oscillator.sustain ?? 1;
+					const release = oscillator.release ?? 0;
+					const detune = oscillator.detune ?? 1;
+
+					playNote({
+						freq: noteFreq * detune,
+						type,
+						noteLength: DEFAULT_NOTE_LENGTH * subdivision,
+						attackTime: attack,
+						decayTime: decay,
+						sustainLevel: sustain,
+						releaseTime: release,
+						loudness: oscillatorVolume
+					});
 				});
 
 				instrumentState.currentNoteIndex ++;
 			}
 
-			if (instrumentState.currentNoteIndex >= sequence.pattern.length && instrumentState.currentRepetition >= sequence.repeat - 1) {
+			if (instrumentState.currentNoteIndex >= sequence.pattern.length && instrumentState.currentRepetition >= repeat - 1) {
 				instrumentState.currentRepetition = 0;
 				instrumentState.currentNoteIndex = 0;
 				instrumentState.currentSequence++;
@@ -153,25 +194,26 @@ const playLoop = () => {
 
 const playNote = ({
   freq,
-  noteLength,
-  attackTime = 0,
-  decayTime = 0,
-  sustainLevel = 1,
-  releaseTime = 0,
-  loudness = 1,
+	type = "sine", // sine, square, sawtooth, triangle
+  noteLength, // in milliseconds
+  attackTime = 0, // in milliseconds
+  decayTime = 0, // in milliseconds
+  sustainLevel = 1, // in milliseconds
+  releaseTime = 0, // in milliseconds
+  loudness = 1, // 0-1
 }) => {
   const oscillator = context.createOscillator();
   const gainNode = context.createGain();
 
-  oscillator.type = "sine";
+  oscillator.type = type;
   oscillator.connect(gainNode);
-  gainNode.connect(context.destination);
+  gainNode.connect(limiter);
   oscillator.frequency.value = freq;
 
   const now = context.currentTime;
   const attackEnd = now + attackTime / 1000; // convert attackTime to seconds
   const decayEnd = attackEnd + decayTime / 1000; // convert decayTime to seconds
-	const sustainEnd = decayEnd + noteLength - attackTime - decayTime / 1000; // convert sustainTime to seconds
+	const sustainEnd = decayEnd + (noteLength - attackTime - decayTime) / 1000; // convert sustainTime to seconds
   const releaseEnd = sustainEnd + releaseTime / 1000; // convert releaseTime to seconds
 
   gainNode.gain.setValueAtTime(0, now);
@@ -185,5 +227,5 @@ const playNote = ({
   // Stop the oscillator after the release time
   setTimeout(function () {
     oscillator.stop();
-  }, noteLength + releaseTime + 1000);
+  }, noteLength + releaseTime);
 };
