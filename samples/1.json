@@ -1,0 +1,78 @@
+{
+	"instruments": {
+		"lead": {
+			"volume": 0.7,
+			"oscillators": [
+				{
+					"type": "square",
+					"length": 0.5,
+					"volume": 0.1,
+					"attack": 10,
+					"decay": 20,
+					"sustain": 0.1,
+					"release": 50
+				},
+				{
+					"type": "sine",
+					"volume": 0.3,
+					"attack": 10,
+					"decay": 0,
+					"sustain": 1,
+					"release": 500,
+					"detune": 0.25
+				},
+				{
+					"type": "sawtooth",
+					"volume": 0.2,
+					"attack": 10,
+					"decay": 50,
+					"sustain": 0.4,
+					"release": 400,
+					"detune": 0.5
+				}
+			],
+			"sequences": [
+				{
+					"pattern": [800, 1200, 1500, 1600],
+					"repeat": 4
+				},
+				{
+					"pattern": [600, 1200, 1500, 1400],
+					"repeat": 4
+				}
+			]
+		},
+		"bass": {
+			"subdivision": 4,
+			"volume": 0.2,
+			"oscillators": [
+				{
+					"type": "square",
+					"volume": 0.5,
+					"attack": 20,
+					"decay": 30,
+					"sustain": 0.5,
+					"release": 800,
+					"detune": 0.25
+				},
+				{
+					"type": "square",
+					"volume": 1,
+					"attack": 20,
+					"decay": 30,
+					"sustain": 0.5,
+					"release": 200,
+					"detune": 0.5
+				}
+			],
+			"sequences": [
+				{
+					"pattern": [400, 400, 400, 600]
+				},
+				{
+					"pattern": [300, 300, 300, 300]
+				}
+			]
+		}
+	}
+}

@@ -1,0 +1,56 @@
+{
+	"stepLength": 100,
+	"instruments": {
+		"bass": {
+			"volume": 0.1,
+			"noteLength": 0.1,
+			"oscillators": [
+				{
+					"type": "square",
+					"volume": 0.4,
+					"attack": 20,
+					"decay": 30,
+					"sustain": 0.5,
+					"release": 800,
+					"detune": 0.25
+				},
+				{
+					"type": "triangle",
+					"volume": 1,
+					"attack": 20,
+					"decay": 30,
+					"sustain": 0.5,
+					"release": 800,
+					"detune": 0.25
+				},
+				{
+					"type": "triangle",
+					"volume": 0.2,
+					"attack": 20,
+					"decay": 30,
+					"sustain": 0.5,
+					"release": 800,
+					"detune": 9.9
+				},
+				{
+					"type": "square",
+					"volume": 1,
+					"attack": 20,
+					"decay": 30,
+					"sustain": 0.5,
+					"release": 200,
+					"detune": 0.5
+				}
+			],
+			"sequences": [
+				{
+					"pattern": [400, 420, 404, 605, 310, 330, 302, 300],
+					"repeat": 4
+				},
+				{
+					"pattern": [300, 310, 0, 310, 300, 0, 310, 310, 0, 300, 310, 0, 300, 310, 300, 300, 300]
+				}
+			]
+		}
+	}
+}

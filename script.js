@@ -1,13 +1,14 @@
 const LOCAL_STORAGE_ID = "saved-source";
 const MAX_VOLUME = -5;
 
-const DEFAULT_NOTE_LENGTH = 200;
-const DEFAULT_STEP_DURATION = 500;
+const DEFAULT_STEP_DURATION = 100;
 
 const defaultSource = {
+	"stepLength": 100,
 	"instruments": {
 		"lead": {
 			"volume": 0.1,
+			"noteLength": 0.5,
 			"oscillators": [
 				{
 					"type": "square",
@@ -118,7 +119,15 @@ const playStopHandler = () => {
 		clearInterval(metronomeInterval);
 	} else {
 		state.instruments = {};
-		metronomeInterval = setInterval(playLoop, DEFAULT_STEP_DURATION);
+
+		const scheduleNext = () => {
+			metronomeInterval = setTimeout(() => {
+				scheduleNext();
+				playLoop();
+			}, parsedSource.stepLength ?? DEFAULT_STEP_DURATION);
+		}
+
+		scheduleNext();
 	}
 
 	isPlaying = !isPlaying;
@@ -137,7 +146,6 @@ const playLoop = () => {
 
 		const instrument = parsedSource.instruments[instrumentName];
 		const subdivision = instrument.subdivision ?? 1;
-		const volume = instrument.volume ?? 1;
 		const instrumentState = state.instruments[instrumentName];
 
 		if (instrument.sequences?.length > 0 && instrumentState.clock % subdivision == 0) {
@@ -155,28 +163,11 @@ const playLoop = () => {
 					instrumentState.clock = 0;
 				}
 
-				const noteFreq = sequence.pattern[instrumentState.currentNoteIndex];
+				const note = sequence.pattern[instrumentState.currentNoteIndex];
 
-				instrument.oscillators.forEach((oscillator) => {
-					const oscillatorVolume = volume * (oscillator.volume ?? 1);
-					const type = oscillator.type;
-					const attack = oscillator.attack ?? 0;
-					const decay = oscillator.decay ?? 0;
-					const sustain = oscillator.sustain ?? 1;
-					const release = oscillator.release ?? 0;
-					const detune = oscillator.detune ?? 1;
+				const noteFreq = typeof note === "number" ? note : getFrequency(note);
 
-					playNote({
-						freq: noteFreq * detune,
-						type,
-						noteLength: DEFAULT_NOTE_LENGTH * subdivision,
-						attackTime: attack,
-						decayTime: decay,
-						sustainLevel: sustain,
-						releaseTime: release,
-						loudness: oscillatorVolume
-					});
-				});
+				playInstrument(instrument, noteFreq);
 
 				instrumentState.currentNoteIndex ++;
 			}
@@ -192,8 +183,34 @@ const playLoop = () => {
 	});
 }
 
+const playInstrument = (instrument, frequency) => {
+	instrument.oscillators.forEach((oscillator) => {
+		const subdivision = instrument.subdivision ?? 1;
+		const volume = instrument.volume ?? 1;
+		const oscillatorVolume = volume * (oscillator.volume ?? 1);
+		const type = oscillator.type;
+		const attack = oscillator.attack ?? 0;
+		const decay = oscillator.decay ?? 0;
+		const sustain = oscillator.sustain ?? 1;
+		const release = oscillator.release ?? 0;
+		const detune = oscillator.detune ?? 1;
+		const noteLength = oscillator.noteLength ?? instrument.noteLength ?? 1;
+
+		playNote({
+			frequency: frequency * detune,
+			type,
+			noteLength: noteLength * subdivision * DEFAULT_STEP_DURATION,
+			attackTime: attack,
+			decayTime: decay,
+			sustainLevel: sustain,
+			releaseTime: release,
+			loudness: oscillatorVolume
+		});
+	});
+}
+
 const playNote = ({
-  freq,
+  frequency,
 	type = "sine", // sine, square, sawtooth, triangle
   noteLength, // in milliseconds
   attackTime = 0, // in milliseconds
@@ -208,7 +225,7 @@ const playNote = ({
   oscillator.type = type;
   oscillator.connect(gainNode);
   gainNode.connect(limiter);
-  oscillator.frequency.value = freq;
+  oscillator.frequency.value = frequency;
 
   const now = context.currentTime;
   const attackEnd = now + attackTime / 1000; // convert attackTime to seconds
@@ -228,4 +245,35 @@ const playNote = ({
   setTimeout(function () {
     oscillator.stop();
   }, noteLength + releaseTime);
+};
+
+const getFrequency = (note) => {
+	const noteMap = {
+		C: 261.63,
+		"C#": 277.18,
+		Db: 277.18,
+		D: 293.66,
+		"D#": 311.13,
+		Eb: 311.13,
+		E: 329.63,
+		F: 349.23,
+		"F#": 369.99,
+		Gb: 369.99,
+		G: 392.00,
+		"G#": 415.30,
+		Ab: 415.30,
+		A: 440.00,
+		"A#": 466.16,
+		Bb: 466.16,
+		B: 493.88,
+	};
+
+	const noteRegex = /^([A-G])([#b]?)(\d)?$/;
+	const [, noteName, accidental, octave] = note.match(noteRegex);
+
+	const baseFrequency = noteMap[noteName.toUpperCase()];
+	const octaveOffset = octave ? (parseInt(octave) - 4) * 12 : 0;
+	const accidentalOffset = accidental === "#" ? 1 : accidental === "b" ? -1 : 0;
+
+	return baseFrequency * Math.pow(2, (octaveOffset + accidentalOffset) / 12);
 };

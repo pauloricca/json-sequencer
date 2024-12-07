@@ -2,8 +2,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const textarea = document.getElementById('source-textarea');
     const lineNumbers = document.getElementById('source-line-numbers');
 
-    textarea.addEventListener('input', updatetextAreaHeight, false);
-    textarea.addEventListener('keyup', updatetextAreaHeight, false);
+    textarea.addEventListener('input', updateTextAreaHeight, false);
+    textarea.addEventListener('keyup', updateTextAreaHeight, false);
     textarea.addEventListener('input', updateLineNumbers, false);
     textarea.addEventListener('keyup', updateLineNumbers, false);
 
@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.selectionStart = this.selectionEnd = start - indent.length + newIndent.length + 1;
             }
         }
-        updatetextAreaHeight();
+        updateTextAreaHeight();
         updateLineNumbers();
     });
 
@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', function() {
         lineNumbers.innerHTML = Array(lines).fill(0).map((_, i) => i + 1).join('<br>');
     }
 
-    function updatetextAreaHeight() {
+    function updateTextAreaHeight() {
         textarea.style.height = 'auto';
         textarea.style.height = textarea.scrollHeight - 2 + 'px';
         lineNumbers.style.height = 'auto';
@@ -74,5 +74,5 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     updateLineNumbers();
-    updatetextAreaHeight();
+    updateTextAreaHeight();
 });
