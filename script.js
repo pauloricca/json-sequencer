@@ -31,7 +31,7 @@ const defaultSource = {
 			],
 			"sequences": [
 				{
-					"pattern": [800, 1200, 1500, 1600],
+					"pattern": ["C4", "D4", "E4", "F4"],
 					"repeat": 4
 				},
 				{
