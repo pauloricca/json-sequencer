@@ -17,7 +17,8 @@ const defaultSource = {
 					"attack": 10,
 					"decay": 20,
 					"sustain": 0.1,
-					"release": 50
+					"release": 50,
+					"pan": -0.5
 				},
 				{
 					"type": "sine",
@@ -26,7 +27,8 @@ const defaultSource = {
 					"decay": 0,
 					"sustain": 1,
 					"release": 500,
-					"detune": 0.5
+					"detune": 0.5,
+					"pan": 0.5
 				}
 			],
 			"sequences": [
@@ -88,7 +90,7 @@ $(() => {
   );
   $("#source-textarea").trigger("change");
 
-  $("#play-stop-button").on("keydown mousedown", playStopHandler);
+  $("#play-stop-button").on("mousedown", playStopHandler);
 });
 
 const sourceChangeHandler = (ev) => {
@@ -114,7 +116,7 @@ const sourceChangeHandler = (ev) => {
   }
 };
 
-const playStopHandler = () => {
+const playStopHandler = (ev) => {
 	if (isPlaying) {
 		clearInterval(metronomeInterval);
 	} else {
@@ -131,6 +133,9 @@ const playStopHandler = () => {
 	}
 
 	isPlaying = !isPlaying;
+
+	$(ev.target).text(isPlaying ? "Stop" : "Play");
+	$(ev.target).blur();
 }
 
 const playLoop = () => {
@@ -195,6 +200,7 @@ const playInstrument = (instrument, frequency) => {
 		const release = oscillator.release ?? 0;
 		const detune = oscillator.detune ?? 1;
 		const noteLength = oscillator.noteLength ?? instrument.noteLength ?? 1;
+		const pan = oscillator.pan ?? 0;
 
 		playNote({
 			frequency: frequency * detune,
@@ -204,68 +210,74 @@ const playInstrument = (instrument, frequency) => {
 			decayTime: decay,
 			sustainLevel: sustain,
 			releaseTime: release,
-			loudness: oscillatorVolume
+			loudness: oscillatorVolume,
+			pan
 		});
 	});
 }
 
 const playNote = ({
-  frequency,
+	frequency,
 	type = "sine", // sine, square, sawtooth, triangle
-  noteLength, // in milliseconds
-  attackTime = 0, // in milliseconds
-  decayTime = 0, // in milliseconds
-  sustainLevel = 1, // in milliseconds
-  releaseTime = 0, // in milliseconds
-  loudness = 1, // 0-1
+	noteLength, // in milliseconds
+	attackTime = 0, // in milliseconds
+	decayTime = 0, // in milliseconds
+	sustainLevel = 1, // in milliseconds
+	releaseTime = 0, // in milliseconds
+	loudness = 1, // 0-1
+	pan = 0, // -1 to 1
 }) => {
-  const oscillator = context.createOscillator();
-  const gainNode = context.createGain();
+	const oscillator = context.createOscillator();
+	const gainNode = context.createGain();
+	const panNode = context.createStereoPanner();
 
-  oscillator.type = type;
-  oscillator.connect(gainNode);
-  gainNode.connect(limiter);
-  oscillator.frequency.value = frequency;
+	oscillator.type = type;
+	oscillator.connect(gainNode);
+	gainNode.connect(panNode);
+	panNode.connect(limiter);
+	oscillator.frequency.value = frequency;
 
-  const now = context.currentTime;
-  const attackEnd = now + attackTime / 1000; // convert attackTime to seconds
-  const decayEnd = attackEnd + decayTime / 1000; // convert decayTime to seconds
+	const now = context.currentTime;
+	const attackEnd = now + attackTime / 1000; // convert attackTime to seconds
+	const decayEnd = attackEnd + decayTime / 1000; // convert decayTime to seconds
 	const sustainEnd = decayEnd + (noteLength - attackTime - decayTime) / 1000; // convert sustainTime to seconds
-  const releaseEnd = sustainEnd + releaseTime / 1000; // convert releaseTime to seconds
+	const releaseEnd = sustainEnd + releaseTime / 1000; // convert releaseTime to seconds
 
-  gainNode.gain.setValueAtTime(0, now);
-  gainNode.gain.linearRampToValueAtTime(loudness, attackEnd);
-  gainNode.gain.linearRampToValueAtTime(sustainLevel * loudness, decayEnd); // Adjust the sustain level based on loudness
-  gainNode.gain.setValueAtTime(sustainLevel * loudness, sustainEnd); // Adjust the sustain level based on loudness
-  gainNode.gain.linearRampToValueAtTime(0, releaseEnd + 0.01);
+	gainNode.gain.setValueAtTime(0, now);
+	gainNode.gain.linearRampToValueAtTime(loudness, attackEnd);
+	gainNode.gain.linearRampToValueAtTime(sustainLevel * loudness, decayEnd); // Adjust the sustain level based on loudness
+	gainNode.gain.setValueAtTime(sustainLevel * loudness, sustainEnd); // Adjust the sustain level based on loudness
+	gainNode.gain.linearRampToValueAtTime(0, releaseEnd + 0.01);
 
-  oscillator.start();
+	panNode.pan.setValueAtTime(pan, now); // Set the pan value
 
-  // Stop the oscillator after the release time
-  setTimeout(function () {
-    oscillator.stop();
-  }, noteLength + releaseTime);
+	oscillator.start();
+
+	// Stop the oscillator after the release time
+	setTimeout(function () {
+		oscillator.stop();
+	}, noteLength + releaseTime);
 };
 
 const getFrequency = (note) => {
 	const noteMap = {
-		C: 261.63,
+		"C": 261.63,
 		"C#": 277.18,
-		Db: 277.18,
-		D: 293.66,
+		"Db": 277.18,
+		"D": 293.66,
 		"D#": 311.13,
-		Eb: 311.13,
-		E: 329.63,
-		F: 349.23,
+		"Eb": 311.13,
+		"E": 329.63,
+		"F": 349.23,
 		"F#": 369.99,
-		Gb: 369.99,
-		G: 392.00,
+		"Gb": 369.99,
+		"G": 392.00,
 		"G#": 415.30,
-		Ab: 415.30,
-		A: 440.00,
+		"Ab": 415.30,
+		"A": 440.00,
 		"A#": 466.16,
-		Bb: 466.16,
-		B: 493.88,
+		"Bb": 466.16,
+		"B": 493.88,
 	};
 
 	const noteRegex = /^([A-G])([#b]?)(\d)?$/;
