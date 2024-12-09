@@ -367,7 +367,7 @@ const midiTest = {
 					instrument.input === deviceName &&
 					instrument.inputChannel === channel
 				) {
-					if (status >= 128 || status <= 143 || velocity == 0) {
+					if ( (status >= 128 && status <= 143) || velocity == 0) {
 						// Note Off
 						midiTest.inputDevices[deviceName].currentNotes[
 							midiNote
