@@ -172,9 +172,9 @@ const playLoop = () => {
 
 				const note = sequence.pattern[instrumentState.currentNoteIndex];
 
-				const noteFreq = typeof note === "number" ? note : getFrequency(note);
+				const frequency = typeof note === "number" ? note : getFrequency(note);
 
-				playInstrument(instrument, noteFreq);
+				playInstrument({ instrument, frequency });
 
 				instrumentState.currentNoteIndex ++;
 			}
@@ -193,37 +193,41 @@ const playLoop = () => {
 /**
  * If doNotStopNote is true, the note will not be stopped and this function will return a callback that stops the note.
  */
-const playInstrument = (instrument, frequency, doNotStopNote = false) => {
-	const stopCallbacks = [];
+const playInstrument = ({ instrument, frequency, doNotStopNote = false, velocity = 1 }) => {
+  const stopCallbacks = [];
 
-	instrument.oscillators.forEach((oscillator) => {
-		const subdivision = instrument.subdivision ?? 1;
-		const volume = instrument.volume ?? 1;
-		const oscillatorVolume = volume * (oscillator.volume ?? 1);
-		const type = oscillator.type;
-		const attack = oscillator.attack ?? 0;
-		const decay = oscillator.decay ?? 0;
-		const sustain = oscillator.sustain ?? 1;
-		const release = oscillator.release ?? 0;
-		const detune = oscillator.detune ?? 1;
-		const noteLength = oscillator.noteLength ?? instrument.noteLength ?? 1;
-		const pan = oscillator.pan ?? 0;
+  instrument.oscillators.forEach((oscillator) => {
+    const subdivision = instrument.subdivision ?? 1;
+    const volume = instrument.volume ?? 1;
+    const oscillatorVolume = volume * (oscillator.volume ?? 1);
+    const type = oscillator.type;
+    const attack = oscillator.attack ?? 0;
+    const decay = oscillator.decay ?? 0;
+    const sustain = oscillator.sustain ?? 1;
+    const release = oscillator.release ?? 0;
+    const detune = oscillator.detune ?? 1;
+    const noteLength = oscillator.noteLength ?? instrument.noteLength ?? 1;
+    const pan = oscillator.pan ?? 0;
 
-		stopCallbacks.push(playNote({
-			frequency: frequency * detune,
-			type,
-			noteLength: !doNotStopNote ? noteLength * subdivision * DEFAULT_STEP_DURATION: undefined,
-			attackTime: attack,
-			decayTime: decay,
-			sustainLevel: sustain,
-			releaseTime: release,
-			loudness: oscillatorVolume,
-			pan
-		}));
-	});
+    stopCallbacks.push(
+      playNote({
+        frequency: frequency * detune,
+        type,
+        noteLength: !doNotStopNote
+          ? noteLength * subdivision * DEFAULT_STEP_DURATION
+          : undefined,
+        attackTime: attack,
+        decayTime: decay,
+        sustainLevel: sustain,
+        releaseTime: release,
+        loudness: oscillatorVolume,
+        pan,
+      })
+    );
+  });
 
-	return () => stopCallbacks.forEach((cb) => cb());
-}
+  return () => stopCallbacks.forEach((cb) => cb());
+};
 
 /**
  * If noteLength is provided, it plays the note for that amount of time, otherwise this function
@@ -321,7 +325,7 @@ const getFrequency = (note) => {
 
 
 // MIDI
-var midiTest = {
+const midiTest = {
 	midiAcess: null,
 	inputDevices: {},
 
@@ -357,26 +361,33 @@ var midiTest = {
 			const deviceName = event.target.name;
 			const channel = (status & 0x0F) + 1; // Extract the channel from the status byte
 
-			if (velocity > 0) {
-				Object.keys(parsedSource.instruments).forEach((instrumentName) => {
-					const instrument = parsedSource.instruments[instrumentName];
+			Object.keys(parsedSource.instruments).forEach((instrumentName) => {
+				const instrument = parsedSource.instruments[instrumentName];
+				if (
+					instrument.input === deviceName &&
+					instrument.inputChannel === channel
+				) {
+					if (status === 128 || status === 131 || velocity === 0) {
+						// Note Off
+						midiTest.inputDevices[deviceName].currentNotes[
+							midiNote
+						]?.stopCallback();
+						delete midiTest.inputDevices[deviceName].currentNotes[midiNote];
+					} else {
+						// Note On
+						midiTest.inputDevices[deviceName].currentNotes[
+							midiNote
+						]?.stopCallback();
 
-					midiTest.inputDevices[deviceName].currentNotes[midiNote]?.stopCallback();
-
-					if (instrument.input === deviceName && instrument.inputChannel === channel) {
 						const frequency = midiNoteToFrequency(midiNote);
-						midiTest.inputDevices[deviceName].currentNotes[midiNote] = 
-						{
-							stopCallback: playInstrument(instrument, frequency, true),
-						}
+						midiTest.inputDevices[deviceName].currentNotes[midiNote] = {
+							stopCallback: playInstrument({ instrument, frequency, doNotStopNote: true, velocity: velocity / 127 }),
+						};
 					}
-				});
-			} else {
-				midiTest.inputDevices[deviceName].currentNotes[midiNote]?.stopCallback();
-				delete midiTest.inputDevices[deviceName].currentNotes[midiNote];
-			}
+				}
+			});
 		}
-		if(navigator.requestMIDIAccess) {
+		if (navigator.requestMIDIAccess) {
 			navigator.requestMIDIAccess({ sysex: false }).then(onMIDISuccess, onMIDIFailure);
 		}
 	},
