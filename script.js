@@ -7,6 +7,8 @@ const defaultSource = {
 	"stepLength": 100,
 	"instruments": {
 		"lead": {
+			"input": "midi-device-name",
+			"inputChannel": 1,
 			"volume": 0.1,
 			"noteLength": 0.5,
 			"oscillators": [
@@ -188,7 +190,12 @@ const playLoop = () => {
 	});
 }
 
-const playInstrument = (instrument, frequency) => {
+/**
+ * If doNotStopNote is true, the note will not be stopped and this function will return a callback that stops the note.
+ */
+const playInstrument = (instrument, frequency, doNotStopNote = false) => {
+	const stopCallbacks = [];
+
 	instrument.oscillators.forEach((oscillator) => {
 		const subdivision = instrument.subdivision ?? 1;
 		const volume = instrument.volume ?? 1;
@@ -202,20 +209,26 @@ const playInstrument = (instrument, frequency) => {
 		const noteLength = oscillator.noteLength ?? instrument.noteLength ?? 1;
 		const pan = oscillator.pan ?? 0;
 
-		playNote({
+		stopCallbacks.push(playNote({
 			frequency: frequency * detune,
 			type,
-			noteLength: noteLength * subdivision * DEFAULT_STEP_DURATION,
+			noteLength: !doNotStopNote ? noteLength * subdivision * DEFAULT_STEP_DURATION: undefined,
 			attackTime: attack,
 			decayTime: decay,
 			sustainLevel: sustain,
 			releaseTime: release,
 			loudness: oscillatorVolume,
 			pan
-		});
+		}));
 	});
+
+	return () => stopCallbacks.forEach((cb) => cb());
 }
 
+/**
+ * If noteLength is provided, it plays the note for that amount of time, otherwise this function
+ * returns a callback that stops the note.
+ */
 const playNote = ({
 	frequency,
 	type = "sine", // sine, square, sawtooth, triangle
@@ -240,23 +253,39 @@ const playNote = ({
 	const now = context.currentTime;
 	const attackEnd = now + attackTime / 1000; // convert attackTime to seconds
 	const decayEnd = attackEnd + decayTime / 1000; // convert decayTime to seconds
-	const sustainEnd = decayEnd + (noteLength - attackTime - decayTime) / 1000; // convert sustainTime to seconds
-	const releaseEnd = sustainEnd + releaseTime / 1000; // convert releaseTime to seconds
-
+	
 	gainNode.gain.setValueAtTime(0, now);
 	gainNode.gain.linearRampToValueAtTime(loudness, attackEnd);
 	gainNode.gain.linearRampToValueAtTime(sustainLevel * loudness, decayEnd); // Adjust the sustain level based on loudness
-	gainNode.gain.setValueAtTime(sustainLevel * loudness, sustainEnd); // Adjust the sustain level based on loudness
-	gainNode.gain.linearRampToValueAtTime(0, releaseEnd + 0.01);
-
-	panNode.pan.setValueAtTime(pan, now); // Set the pan value
 
 	oscillator.start();
 
-	// Stop the oscillator after the release time
-	setTimeout(function () {
-		oscillator.stop();
-	}, noteLength + releaseTime);
+	if (noteLength !== undefined) {
+		const sustainEnd = decayEnd + (noteLength - attackTime - decayTime) / 1000; // convert sustainTime to seconds
+		const releaseEnd = sustainEnd + releaseTime / 1000; // convert releaseTime to seconds
+
+		gainNode.gain.setValueAtTime(sustainLevel * loudness, sustainEnd); // Adjust the sustain level based on loudness
+		gainNode.gain.linearRampToValueAtTime(0, releaseEnd + 0.01);
+
+		panNode.pan.setValueAtTime(pan, now); // Set the pan value
+
+		// Stop the oscillator after the release time
+		setTimeout(function () {
+			oscillator.stop();
+		}, noteLength + releaseTime);
+	} else {
+		return () => {
+			const now = context.currentTime;
+			const releaseEnd = now + releaseTime / 1000; // convert releaseTime to seconds
+
+			gainNode.gain.linearRampToValueAtTime(0, releaseEnd + 0.01);
+
+			// Stop the oscillator after the release time
+			setTimeout(function () {
+				oscillator.stop();
+			}, releaseTime);
+		}
+	}
 };
 
 const getFrequency = (note) => {
@@ -289,3 +318,76 @@ const getFrequency = (note) => {
 
 	return baseFrequency * Math.pow(2, (octaveOffset + accidentalOffset) / 12);
 };
+
+
+// MIDI
+var midiTest = {
+	midiAcess: null,
+	inputDevices: {},
+
+	init: () => {
+		const onMIDISuccess = (midiAccess) => {
+			const midiInputDeviceNames = [];
+			midiAccess.inputs.forEach((input) => {
+				midiInputDeviceNames.push(input.name);
+				input.onmidimessage = onMIDIMessage;
+			});
+			Object.keys(midiTest.inputDevices).forEach((deviceName) => {
+				if (!midiInputDeviceNames.includes(deviceName)) {
+					console.log(`Device ${deviceName} was removed`);
+					midiTest.inputDevices[deviceName].currentNotes.forEach((note) => note.stopCallback());
+					delete midiTest.inputDevices[deviceName];
+				}
+			});
+
+			midiInputDeviceNames.forEach((deviceName) => {
+				if (!midiTest.inputDevices[deviceName]) {
+					console.log(`Device ${deviceName} was added`);
+					midiTest.inputDevices[deviceName] = { name: deviceName, currentNotes: [] };
+				}
+			});
+
+			$("#midi-devices-list").text("MIDI Input Devices: " + midiInputDeviceNames.join(", "));
+		}
+		const onMIDIFailure = (e) => {
+			console.log('No access to MIDI devices' + e);
+		}
+		const onMIDIMessage = (event) => {
+			const [status, midiNote, velocity] = event.data;
+			const deviceName = event.target.name;
+			const channel = (status & 0x0F) + 1; // Extract the channel from the status byte
+
+			if (velocity > 0) {
+				Object.keys(parsedSource.instruments).forEach((instrumentName) => {
+					const instrument = parsedSource.instruments[instrumentName];
+
+					midiTest.inputDevices[deviceName].currentNotes[midiNote]?.stopCallback();
+
+					if (instrument.input === deviceName && instrument.inputChannel === channel) {
+						const frequency = midiNoteToFrequency(midiNote);
+						midiTest.inputDevices[deviceName].currentNotes[midiNote] = 
+						{
+							stopCallback: playInstrument(instrument, frequency, true),
+						}
+					}
+				});
+			} else {
+				midiTest.inputDevices[deviceName].currentNotes[midiNote]?.stopCallback();
+				delete midiTest.inputDevices[deviceName].currentNotes[midiNote];
+			}
+		}
+		if(navigator.requestMIDIAccess) {
+			navigator.requestMIDIAccess({ sysex: false }).then(onMIDISuccess, onMIDIFailure);
+		}
+	},
+};
+
+const midiNoteToFrequency = (note) => {
+	const baseFrequency = 440; // A4 frequency
+	const semitoneRatio = 2 ** (1 / 12);
+	const distanceFromA4 = note - 69; // MIDI note number for A4 is 69
+	const frequency = baseFrequency * (semitoneRatio ** distanceFromA4);
+	return frequency;
+};
+
+midiTest.init();

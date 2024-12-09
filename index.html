@@ -9,13 +9,18 @@
 </head>
 
 <body>
-	<div style="display: none;" id="code-has-error"></div>
 	<div id="source-container">
 		<div id="source-line-numbers"></div>
 		<textarea id="source-textarea"></textarea>
 	</div>
+	<div style="display: none;" id="code-has-error"></div>
 	<div class="controls">
-		<button id="play-stop-button">Play</button>
+		<div class="controls__right-panel">
+			<button id="play-stop-button">Play</button>
+		</div>
+		<div class="controls__left-panel">
+			<div id="midi-devices-list"></div>
+		</div>
 	</div>
 </body>
 
